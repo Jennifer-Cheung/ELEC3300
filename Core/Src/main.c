@@ -22,11 +22,10 @@
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
 
+#include <stdio.h>
 #include "lcd.h"
 #include "images.h"
 #include "kirby.h"
-#include "kirbySprites.h"
-#include <stdio.h>
 
 /* USER CODE END Includes */
 
@@ -65,98 +64,6 @@ static void MX_FSMC_Init(void);
 /* USER CODE BEGIN 0 */
 
 void XferCpltCallback(DMA_HandleTypeDef* hdma);
-
-uint16_t currentPos = 0;
-/*
- * Moves the platform image one pixel off from the original position.
- *
- * uint16_t xPos: the updated x Position of the first column
- * */
-void movePlatform(uint16_t kirbyX) {
-	uint16_t xPos = kirbyX - 160;
-	if (currentPos < xPos) {
-		// Scrolling to the right
-		uint16_t targetCol = (xPos - 1) % 320;
-		for (uint16_t row = 0; row < 209; row++) {
-			LCD_DrawDot(targetCol, row, platformImg[882 * row + xPos + 320 - 1]);
-		}
-	} else if (currentPos > xPos) {
-		// Scrolling to the left
-		uint16_t targetCol = xPos % 320;
-		for (uint16_t row = 0; row < 209; row++) {
-			LCD_DrawDot(targetCol, row, platformImg[882 * row + xPos]);
-		}
-	} else {
-		return;
-	}
-	currentPos = xPos;
-
-
-	// Vertical scroll, starting from column = xPos
-	  LCD_Write_Cmd(0x33);
-	  LCD_Write_Data(0x00);
-	  LCD_Write_Data(0x00);
-	  LCD_Write_Data(0x01);
-	  LCD_Write_Data(0x40);
-	  LCD_Write_Data(0x00);
-	  LCD_Write_Data(0x00);
-
-	  LCD_Write_Cmd(0x37);
-	  LCD_Write_Data((xPos % 320) >> 8);
-	  LCD_Write_Data((xPos % 320) & 0xff);
-}
-
-void displayKirbyFacingRight(const uint16_t* frame, uint16_t xPos, uint16_t yPos) {
-	for (int x = 0; x < 26; x++) {
-		uint16_t displayXPos = (xPos + x) % 320;
-		for (int y = 0; y < 23; y++) {
-			uint16_t displayYPos = yPos + y;
-			uint16_t color = frame[23 * x + y];
-			// Replacing color
-			if (color == 0x4B4E) {
-				uint16_t newColor = platformImg[882 * (displayYPos) + (xPos + x)];
-				color = newColor;
-			}
-			LCD_DrawDot(displayXPos, displayYPos, color);
-		}
-	}
-}
-
-void displayKirbyFacingLeft(const uint16_t* frame, uint16_t xPos, uint16_t yPos) {
-	for (int x = 0; x < 26; x++) {
-		uint16_t displayXPos = (xPos + 25 - x) % 320;
-		for (int y = 0; y < 23; y++) {
-			uint16_t displayYPos = yPos + y;
-			uint16_t color = frame[23 * x + y];
-			// Replacing color
-			if (color == 0x4B4E) {
-				uint16_t newColor = platformImg[882 * (displayYPos) + (xPos + 25 - x)];
-				color = newColor;
-			}
-			LCD_DrawDot(displayXPos, displayYPos, color);
-		}
-	}
-}
-
-void redrawColumnBefore(struct Kirby* kirby) {
-	// Redraw the first column
-	for (int y = 0; y < 23; y++) {
-	  uint16_t displayX = kirby->xPos % 320;
-	  uint16_t displayY = kirby->yPos + y;
-	  uint16_t color = platformImg[882 * (displayY) + (kirby->xPos)];
-	  LCD_DrawDot(displayX, displayY, color);
-	}
-}
-
-void redrawColumnAfter(struct Kirby* kirby) {
-	// Redraw the last column
-	for (int y = 0; y < 23; y++) {
-		uint16_t displayX = (kirby->xPos + 25) % 320;
-		uint16_t displayY = kirby->yPos + y;
-		uint16_t color = platformImg[882 * (displayY) + kirby->xPos + 25];
-		LCD_DrawDot(displayX, displayY, color);
-	}
-}
 
 /* USER CODE END 0 */
 
@@ -211,70 +118,140 @@ int main(void)
   }
 
   // Initializing Kirby
+//  struct Kirby kirby = {
+//		  50, 140,
+//		  {KIRBY_IDLE_SPRITE_0, KIRBY_IDLE_SPRITE_1, KIRBY_IDLE_SPRITE_2},
+//		  {
+//				  KIRBY_WALKING_SPRITE_0, KIRBY_WALKING_SPRITE_1, KIRBY_WALKING_SPRITE_2, KIRBY_WALKING_SPRITE_3, KIRBY_WALKING_SPRITE_4,
+//				  KIRBY_WALKING_SPRITE_5, KIRBY_WALKING_SPRITE_6, KIRBY_WALKING_SPRITE_7, KIRBY_WALKING_SPRITE_8, KIRBY_WALKING_SPRITE_9,
+//		  }
+//  };
+//
+//  uint8_t currentFrame = 0;
+//
+//  Kirby_displayKirbyFacingRight(kirby.idleKeyframes[currentFrame], kirby.xPos, kirby.yPos);
+//  HAL_Delay(1000);
+
+  /* GPIO definitions */
+  // Key 1 (Left Button)
+  GPIO_TypeDef* LEFT_GPIO_PORT = GPIOA;
+  uint16_t LEFT_GPIO_PIN = GPIO_PIN_0;
+  uint8_t inputLeft;
+
+  // Key 2 (Right Button)
+  GPIO_TypeDef* RIGHT_GPIO_PORT = GPIOC;
+  uint16_t RIGHT_GPIO_PIN = GPIO_PIN_13;
+  uint8_t inputRight;
+
+  // A Button
+  GPIO_TypeDef* A_BUTTON_GPIO_PORT = GPIOB;
+  uint16_t A_BUTTON_GPIO_PIN = GPIO_PIN_10;
+  uint8_t inputA;
+
+  // B Button
+  GPIO_TypeDef* B_BUTTON_GPIO_PORT = GPIOB;
+  uint16_t B_BUTTON_GPIO_PIN = GPIO_PIN_11;
+  uint8_t inputB;
+
+  // Keeps track of state change: idle - 0, walking right - 1, walking left - 2
+//  uint8_t state = 0;
+//
+//  // Keeps track of direction: right - 0, left - 1
+//  uint8_t direction = 0;
+//
+//  const uint16_t KIRBY_FLOATING_SPRITE_0[1056] = {
+//  0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x3A8B,0x3104,0x40C4,0x4906,0x4906,0x3883,0x3186,0x3229,0x3229,0x3229,0x3229,0x3229,0x3229,0x3229,0x3229,0x3229,0x3229,0x3229,0x3229,0x3946,0x48E5,0x4906,0x40C5,0x39A7,0x42EC,0x4B4E,0x4B4E,0x4B4E,0x4B4E,
+//  0x4B4E,0x4B4E,0x4B4E,0x3A8B,0x3104,0x9147,0xE332,0xF3F6,0xF3F6,0xD28F,0x68C5,0x4083,0x48E5,0x4947,0x4967,0x4988,0x4988,0x4967,0x4967,0x4926,0x40C5,0x2842,0x1820,0x99CA,0xEB94,0xF3F6,0xEB73,0x81CA,0x39C8,0x42EC,0x4B4E,0x4B4E,0x4B4E,
+//  0x4B4E,0x4B4E,0x4B4E,0x1925,0x78E5,0xDB11,0xF4B9,0xFD1B,0xFD1B,0xF457,0xD28F,0xD28F,0xEBB4,0xF478,0xFCB9,0xFCFA,0xFD1B,0xFCD9,0xFCB9,0xF437,0xEB73,0xAA4C,0x89A8,0xCA8E,0xF416,0xF4B9,0xFCFA,0xF457,0x5167,0x2A09,0x4B4E,0x4B4E,0x4B4E,
+//  0x4B4E,0x4B4E,0x4B4E,0x1925,0x89AA,0xEC37,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xF457,0xF457,0xFCFA,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xF457,0xEB73,0xEB73,0xEBB4,0xF478,0xFCB8,0x59A8,0x2A09,0x4B4E,0x4B4E,0x4B4E,
+//  0x4B4E,0x4B4E,0x4B4E,0x1925,0x9A4C,0xF478,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFCD9,0xFCFA,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xF457,0xE311,0xE331,0xEBF5,0x5988,0x2A09,0x4B4E,0x4B4E,0x4B4E,
+//  0x4B4E,0x4B4E,0x4B4E,0x1925,0x920B,0xF437,0xFCFA,0xFD1B,0xFD1B,0xFCFA,0xFCFA,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFCFA,0xFCDA,0xFCFA,0xFD1B,0xFCFA,0xFCB8,0xF416,0xD28E,0xC24D,0x40E5,0x2A09,0x4B4E,0x4B4E,0x4B4E,
+//  0x4B4E,0x4B4E,0x4B4E,0x1925,0x8127,0xE352,0xF498,0xFCDA,0xFCDA,0xFCB9,0xFCFA,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xF437,0xD372,0xE416,0xF4DA,0xF437,0xD372,0xE3D4,0xF416,0xAA0B,0x3062,0x2A09,0x4B4E,0x4B4E,0x4B4E,
+//  0x4B4E,0x4B4E,0x3A8B,0x10C3,0x6083,0xCA4D,0xF3D5,0xF477,0xFC98,0xFCFA,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xEB93,0xAACC,0xC2CE,0xEC37,0xEB93,0xAACC,0xC2CE,0xEC37,0xEBB4,0x6126,0x2966,0x42EC,0x4B4E,0x4B4E,
+//  0x4B4E,0x4B4E,0x1925,0x2021,0x6905,0xC26D,0xEBB4,0xF478,0xFCFA,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xF457,0xC4D5,0x9A6B,0xD393,0xF457,0xC4D5,0x9A6B,0xD393,0xFCD9,0xA20B,0x2841,0x2A09,0x4B4E,0x4B4E,
+//  0x4B4E,0x3A8B,0x20E3,0x80E6,0xDAF0,0xF457,0xFCFA,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFCD9,0x69C9,0x3041,0xB351,0xFCD9,0x69C9,0x3041,0xB351,0xFD1B,0xD2AF,0x5083,0x2966,0x42EC,0x4B4E,
+//  0x4B4E,0x1925,0x4862,0xB9EB,0xEBF5,0xFCFA,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xA22C,0x2841,0x9B31,0xFD1B,0xA22C,0x2841,0x9B31,0xFD1B,0xEBB4,0x9988,0x2841,0x2A09,0x4B4E,
+//  0x4B4E,0x1925,0x78E5,0xDAF0,0xF499,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xF4B9,0xF3F8,0xFBB7,0xFC99,0xD2F0,0x40A4,0x9B31,0xFD1B,0xD2F0,0x40A4,0x9A4F,0xF438,0xF4B8,0xD28E,0x4083,0x2A09,0x4B4E,
+//  0x4B4E,0x1925,0x8969,0xEBB4,0xFCD9,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xF457,0xF2D4,0xFA13,0xFBF8,0xF457,0x81EA,0xB372,0xFD1B,0xF457,0x81EA,0xB18E,0xF355,0xF4B9,0xE352,0x48C5,0x2A09,0x4B4E,
+//  0x4B4E,0x1925,0x8969,0xEBB4,0xFCD9,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xEBD5,0xEC16,0xF4DA,0xF4B9,0xEBB4,0xF457,0xFD1B,0xFD1B,0xE352,0x48C5,0x2A09,0x4B4E,
+//  0x4B4E,0x1925,0x8969,0xEBB4,0xFCD9,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xEBD5,0xE393,0xDB11,0xEC37,0xFD1B,0xFD1B,0xFD1B,0xE352,0x48C5,0x2A09,0x4B4E,
+//  0x4B4E,0x1925,0x8969,0xEBB4,0xFCD9,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xEB93,0xD26E,0xC1EB,0xE3D5,0xFD1B,0xFD1B,0xFD1B,0xE352,0x48C5,0x2A09,0x4B4E,
+//  0x4B4E,0x1925,0x8969,0xEB93,0xF4B9,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xF457,0xF499,0xF457,0xF499,0xFD1B,0xFD1B,0xFCFA,0xE332,0x48C5,0x2A09,0x4B4E,
+//  0x4B4E,0x1925,0x8127,0xE2F1,0xF457,0xFCFA,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFCD9,0xFCFA,0xFCD9,0xFCFA,0xFD1B,0xFD1B,0xFCB9,0xDAD0,0x48A4,0x2A09,0x4B4E,
+//  0x4B4E,0x1925,0x6083,0xCA4D,0xF3D5,0xF498,0xFCFA,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFCFA,0xF436,0xB1EB,0x3042,0x2A09,0x4B4E,
+//  0x4B4E,0x29C7,0x3082,0x9948,0xE2F1,0xF3F5,0xF498,0xFCFA,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFCFA,0xF477,0xE2F1,0x7905,0x20C3,0x326A,0x4B4E,
+//  0x4B4E,0x4B4E,0x1925,0x6083,0xCA4D,0xEB53,0xF3F5,0xF498,0xFCDA,0xFCFA,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFCFA,0xFCDA,0xF477,0xF3D5,0xDA6E,0x48A4,0x2A09,0x4B4E,0x4B4E,
+//  0x4B4E,0x4B4E,0x29C7,0x3082,0x9948,0xE2F1,0xF394,0xF3F5,0xF436,0xF498,0xFCDA,0xFCFA,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFD1B,0xFCFA,0xFCDA,0xF477,0xF436,0xF3D5,0xEB52,0xA189,0x38E4,0x326A,0x4B4E,0x4B4E,
+//  0x4B4E,0x4B4E,0x4B4E,0x1925,0x6083,0xCA4D,0xEB53,0xF394,0xF394,0xF3F5,0xF436,0xF478,0xF4B9,0xFCDA,0xFCDA,0xFCDA,0xFCDA,0xFCDA,0xFCDA,0xFCDA,0xF4B9,0xF498,0xF457,0xF436,0xF3D5,0xF394,0xEB52,0xC22D,0x40A3,0x2A09,0x4B4E,0x4B4E,0x4B4E,
+//  0x4B4E,0x4B4E,0x4B4E,0x1925,0x5022,0xB149,0xDAAF,0xEB53,0xF394,0xF394,0xF394,0xF394,0xF3F5,0xF436,0xF436,0xF436,0xF436,0xF436,0xF436,0xF436,0xF3D5,0xF394,0xF394,0xF394,0xF394,0xEB52,0xD24E,0x70E5,0x20C3,0x326A,0x4B4E,0x4B4E,0x4B4E,
+//  0x4B4E,0x4B4E,0x3A8B,0x20E3,0x9827,0xC089,0xB149,0xCA4D,0xE2F1,0xEB53,0xF394,0xF394,0xF394,0xF394,0xF394,0xF394,0xF394,0xF394,0xF394,0xF394,0xF394,0xF394,0xF394,0xEB52,0xE2D0,0xC20C,0x8906,0x38E4,0x326A,0x4B4E,0x4B4E,0x4B4E,0x4B4E,
+//  0x4B4E,0x4B4E,0x1925,0x4821,0xC88B,0xE06D,0xA047,0xA085,0xB148,0xCA4D,0xE2F1,0xEB12,0xEB53,0xF394,0xF394,0xF394,0xF394,0xF394,0xF394,0xF394,0xEB52,0xEB12,0xE2D0,0xC20C,0x8906,0x5062,0x20C3,0x326A,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,
+//  0x4B4E,0x4B4E,0x1925,0x7004,0xE1EF,0xF991,0xE06D,0xC849,0x9044,0x9885,0xB148,0xB1AA,0xCA4D,0xDAAF,0xDAAF,0xDAAF,0xDAAF,0xDAAF,0xDAAF,0xDAAF,0xD22D,0xB9CA,0x8906,0x5062,0x20C3,0x1104,0x326A,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,
+//  0x4B4E,0x4B4E,0x1925,0x8006,0xEB94,0xFA73,0xF8D0,0xF8D0,0xD04A,0xB806,0x8043,0x4861,0x6083,0x78A4,0x88C5,0xA0C6,0xB0A6,0xB0A6,0xB0A6,0xB0A6,0xB0A6,0x6863,0x20C3,0x1104,0x326A,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,
+//  0x4B4E,0x4B4E,0x1925,0x7805,0xE06D,0xF8D0,0xF8D0,0xF08E,0xD82B,0xB808,0x6843,0x20C3,0x1104,0x1104,0x3082,0x7823,0xA805,0xB806,0xB806,0xB005,0x8804,0x38A4,0x326A,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,
+//  0x4B4E,0x4B4E,0x1925,0x6002,0xC069,0xE88D,0xE88E,0xD02A,0xB007,0x6843,0x20C3,0x326A,0x4B4E,0x4B4E,0x29C7,0x3082,0x7024,0x8806,0x8806,0x8004,0x38A4,0x326A,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,
+//  0x4B4E,0x4B4E,0x29C7,0x3082,0x6022,0x8005,0x8806,0x8004,0x5022,0x20C3,0x326A,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x29C7,0x1104,0x1104,0x1104,0x1104,0x326A,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,
+//  0x4B4E,0x4B4E,0x4B4E,0x29C7,0x1104,0x1104,0x1104,0x1104,0x1104,0x326A,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E,0x4B4E
+//  };
+//
+//  const uint8_t FLOATING_X_OFFSET = 2;
+//  const uint8_t FLOATING_WIDTH = 33;
+//  const uint8_t FLOATING_HEIGHT = 32;
+//
+//  const uint16_t xPos = 10;
+//  const uint16_t yPos = 110;
+
   struct Kirby kirby = {
-		  50, 140,
-		  {KIRBY_IDLE_SPRITE_0, KIRBY_IDLE_SPRITE_1, KIRBY_IDLE_SPRITE_2},
-		  {
-				  KIRBY_WALKING_SPRITE_0, KIRBY_WALKING_SPRITE_1, KIRBY_WALKING_SPRITE_2, KIRBY_WALKING_SPRITE_3, KIRBY_WALKING_SPRITE_4,
-				  KIRBY_WALKING_SPRITE_5, KIRBY_WALKING_SPRITE_6, KIRBY_WALKING_SPRITE_7, KIRBY_WALKING_SPRITE_8, KIRBY_WALKING_SPRITE_9,
-		  }
+		  10,		// uint16_t xPos
+		  110,		// uint16_t yPos
+		  0,		// uint8_t hasSwallowed
+		  0,		// uint8_t isFloating
+		  0,		// uint8_t enableUp
+		  1,		// uint8_t enableX
+		  RIGHT,	// enum Direction direction
+		  IDLE,		// enum State state
+		  0,		// uint8_t currentFrame
+		  2500,		// uint16_t remainingTicks
+		  IDLE,		// enum State previousState
+		  1			// uint8_t enableStateChange
   };
 
-  // Looping through idle sprites
-  uint8_t currentFrame = 0;
-//  while (1) {
-//	  displayKirby(kirby.idleKeyframes[currentFrame], kirby.xPos, kirby.yPos);
-//	  currentFrame = (currentFrame + 1) % 3;
-//	  HAL_Delay(50);
-//	  if (currentFrame == 1) {
-//		  HAL_Delay(2500); // Stay longer at the 0th frame
+  /**
+   * Draw sprite parameters
+   * uint8_t spriteWidth
+   * uint8_t spriteHeight
+   * uint8_t spriteOffset
+   * uint16_t* frame
+   * uint16_t xPos
+   * uint16_t yPos
+   */
+
+//  for (int x = 0; x < FLOATING_WIDTH; x++) {
+//	  uint16_t displayXPos = (xPos + FLOATING_X_OFFSET + x) % SCREEN_WIDTH;
+//	  for (int y = FLOATING_HEIGHT - 1; y >= 0; y--) {
+//		  uint16_t displayYPos = yPos + y;
+//		  uint16_t color = KIRBY_FLOATING_SPRITE_0[y * FLOATING_WIDTH + x];
+//		  if (color == 0x4B4E) {
+//			  uint16_t newColor = platformImg[882 * (displayYPos) + (xPos + FLOATING_X_OFFSET + x)];
+//			  color = newColor;
+//		  }
+//		  LCD_DrawDot(displayXPos, displayYPos, color);
+//	  }
+//  }
+//
+//  for (int x = 0; x < FLOATING_WIDTH; x++) {
+//	  uint16_t displayXPos = (xPos + FLOATING_X_OFFSET + FLOATING_WIDTH - x) % SCREEN_WIDTH;
+//	  for (int y = FLOATING_HEIGHT - 1; y >= 0; y--) {
+//		  uint16_t displayYPos = yPos + y;
+//		  uint16_t color = KIRBY_FLOATING_SPRITE_0[y * FLOATING_WIDTH + x];
+//		  if (color == 0x4B4E) {
+//			  uint16_t newColor = platformImg[882 * (displayYPos) + (xPos + FLOATING_X_OFFSET + FLOATING_WIDTH - x)];
+//			  color = newColor;
+//		  }
+//		  LCD_DrawDot(displayXPos, displayYPos, color);
 //	  }
 //  }
 
-  displayKirbyFacingRight(kirby.idleKeyframes[currentFrame], kirby.xPos, kirby.yPos);
-  HAL_Delay(1000);
-//  // Moving Kirby to the right
-//  // Redraw the first column
-//  for (int y = 0; y < 23; y++) {
-//	  uint16_t displayX = kirby.xPos;
-//	  uint16_t displayY = kirby.yPos + y;
-//	  uint16_t color = platformImg[882 * (displayY) + (displayX)];
-//	  LCD_DrawDot(displayX, displayY + y, color);
-//  }
-//
-//  // Draw Kirby 1 pixel to the right
-//  kirby.xPos++;
-//  displayKirby(kirby.idleKeyframes[currentFrame], kirby.xPos, kirby.yPos);
-
-//  // Moves the platform to the right
-//  for (uint16_t i = 0; i < 50; i++) {
-//	  movePlatform(i);
-//  }
-//
-//  HAL_Delay(2000);
-//
-//  // Moves the platform to the left
-//  for (uint16_t i = 49; i > 0; i--) {
-//	  movePlatform(i);
-//  }
-
-
-  /* GPIO definitions */
-  // Key 1
-  GPIO_TypeDef* KEY1_GPIO_PORT = GPIOA;
-  uint16_t KEY1_GPIO_PIN = GPIO_PIN_0;
-  uint8_t key1State;
-
-  // Key 2
-  GPIO_TypeDef* KEY2_GPIO_PORT = GPIOC;
-  uint16_t KEY2_GPIO_PIN = GPIO_PIN_13;
-  uint8_t key2State;
-
-  // Keeps track of state change: idle - 0, walking right - 1, walking left - 2
-  uint8_t state = 0;
-
-  // Keeps track of direction: right - 0, left - 1
-  uint8_t direction = 0;
 
   /* USER CODE END 2 */
 
@@ -286,87 +263,109 @@ int main(void)
 
     /* USER CODE BEGIN 3 */
 
-	  // Displays xPos on LCD
-	  LCD_Clear(10, 210, 100, 20, 0xFFFF);
-	  char buffer[6];
-	  sprintf(buffer, "%d", kirby.xPos);
-	  LCD_DrawString(10, 210, buffer);
+	  /* Reads inputs */
+	  inputLeft = HAL_GPIO_ReadPin(LEFT_GPIO_PORT, LEFT_GPIO_PIN);
+	  inputRight = HAL_GPIO_ReadPin(RIGHT_GPIO_PORT, RIGHT_GPIO_PIN);
+	  inputA = HAL_GPIO_ReadPin(A_BUTTON_GPIO_PORT, A_BUTTON_GPIO_PIN);
+	  inputB = HAL_GPIO_ReadPin(B_BUTTON_GPIO_PORT, B_BUTTON_GPIO_PIN);
 
-	  key1State = HAL_GPIO_ReadPin(KEY1_GPIO_PORT, KEY1_GPIO_PIN);
-	  key2State = HAL_GPIO_ReadPin(KEY2_GPIO_PORT, KEY2_GPIO_PIN);
-	  if (key1State) {
-		  /* Walking left */
-		  if (state != 2) {
-			  state = 2;
-			  currentFrame = 0;
-			  direction = 1;
-		  }
-		  redrawColumnAfter(&kirby);
-		  if (kirby.xPos > 0) {
-			  if (kirby.xPos > 160 && kirby.xPos < 696) {
-				  movePlatform(kirby.xPos);
-			  }
-			  kirby.xPos--;
-		  }
-		  displayKirbyFacingLeft(kirby.walkingKeyframes[currentFrame], kirby.xPos, kirby.yPos);
-		  currentFrame = (currentFrame + 1) % 10;
-		  HAL_Delay(20);
-	  } else if (key2State) {
-		  /* Walking right */
-		  // Set state to walking, reset frame
-		  if (state != 1) {
-			  state = 1;
-			  currentFrame = 0;
-			  direction = 0;
-		  }
-		  redrawColumnBefore(&kirby);
-		  if (kirby.xPos < 829) {
-			  if (kirby.xPos > 160 && kirby.xPos < 696) {
-				  movePlatform(kirby.xPos);
-			  }
-			  kirby.xPos++;
-		  }
-		  displayKirbyFacingRight(kirby.walkingKeyframes[currentFrame], kirby.xPos, kirby.yPos);
-		  currentFrame = (currentFrame + 1) % 10;
-		  HAL_Delay(20);
-	  } else {
-		  /* Idle */
-		  // Set state to idle, reset frame
-		  if (state != 0) {
-			  state = 0;
-			  currentFrame = 0;
-		  }
-		  if (direction == 0) {
-			  // right
-			  displayKirbyFacingRight(kirby.idleKeyframes[currentFrame], kirby.xPos, kirby.yPos);
-		  } else {
-			  // left
-			  displayKirbyFacingLeft(kirby.idleKeyframes[currentFrame], kirby.xPos, kirby.yPos);
-		  }
-		  currentFrame = (currentFrame + 1) % 3;
-		  HAL_Delay(50);
-		  if (currentFrame == 1) {
-			  //HAL_Delay(2500); // Stay longer at the 0th frame
+	  /* Updates state based on input */
+	  Kirby_updateState(&kirby, inputB, inputA, inputLeft, inputRight);
 
-			  uint32_t tickstart = HAL_GetTick();
-			  uint32_t wait = 2500;
-
-			  /* Add a freq to guarantee minimum wait */
-			  if (wait < HAL_MAX_DELAY)
-			  {
-				  wait += (uint32_t)(uwTickFreq);
-			  }
-
-			  while ((HAL_GetTick() - tickstart) < wait)
-			  {
-				  key1State = HAL_GPIO_ReadPin(KEY1_GPIO_PORT, KEY1_GPIO_PIN);
-				  key2State = HAL_GPIO_ReadPin(KEY2_GPIO_PORT, KEY2_GPIO_PIN);
-				  if (key2State || key1State) {
-					  break;
-				  }
-			  }
-		  }
+	  /* Checks X displacement */
+	  if (inputLeft) {
+		  Kirby_moveX(&kirby, LEFT);
+	  } else if (inputRight) {
+		  Kirby_moveX(&kirby, RIGHT);
 	  }
+
+	  /* Checks Y displacement */
+	  Kirby_moveY(&kirby);
+
+	  /* Renders sprite */
+	  Kirby_renderSprite(&kirby);
+
+	  // Displays xPos on LCD
+//	  LCD_Clear(10, 210, 100, 20, 0xFFFF);
+//	  char buffer[6];
+//	  sprintf(buffer, "%d", kirby.xPos);
+//	  LCD_DrawString(10, 210, buffer);
+//
+//	  key1State = HAL_GPIO_ReadPin(KEY1_GPIO_PORT, KEY1_GPIO_PIN);
+//	  key2State = HAL_GPIO_ReadPin(KEY2_GPIO_PORT, KEY2_GPIO_PIN);
+//	  if (key1State) {
+//		  /* Walking left */
+//		  if (state != 2) {
+//			  state = 2;
+//			  currentFrame = 0;
+//			  direction = 1;
+//		  }
+//		  Kirby_redrawColumnAfter(&kirby);
+//		  if (kirby.xPos > 0) {
+//			  if (kirby.xPos > 160 && kirby.xPos < 696) {
+//				  Kirby_movePlatform(kirby.xPos);
+//			  }
+//			  kirby.xPos--;
+//		  }
+//		  Kirby_displayKirbyFacingLeft(kirby.walkingKeyframes[currentFrame], kirby.xPos, kirby.yPos);
+//		  currentFrame = (currentFrame + 1) % 10;
+//		  HAL_Delay(20);
+//	  } else if (key2State) {
+//		  /* Walking right */
+//		  // Set state to walking, reset frame
+//		  if (state != 1) {
+//			  state = 1;
+//			  currentFrame = 0;
+//			  direction = 0;
+//		  }
+//		  Kirby_redrawColumnBefore(&kirby);
+//		  if (kirby.xPos < 829) {
+//			  if (kirby.xPos > 160 && kirby.xPos < 696) {
+//				  Kirby_movePlatform(kirby.xPos);
+//			  }
+//			  kirby.xPos++;
+//		  }
+//		  Kirby_displayKirbyFacingRight(kirby.walkingKeyframes[currentFrame], kirby.xPos, kirby.yPos);
+//		  currentFrame = (currentFrame + 1) % 10;
+//		  HAL_Delay(20);
+//	  } else {
+//		  /* Idle */
+//		  // Set state to idle, reset frame
+//		  if (state != 0) {
+//			  state = 0;
+//			  currentFrame = 0;
+//		  }
+//		  if (direction == 0) {
+//			  // right
+//			  Kirby_displayKirbyFacingRight(kirby.idleKeyframes[currentFrame], kirby.xPos, kirby.yPos);
+//		  } else {
+//			  // left
+//			  Kirby_displayKirbyFacingLeft(kirby.idleKeyframes[currentFrame], kirby.xPos, kirby.yPos);
+//		  }
+//		  currentFrame = (currentFrame + 1) % 3;
+//		  HAL_Delay(50);
+//		  if (currentFrame == 1) {
+//			  //HAL_Delay(2500); // Stay longer at the 0th frame
+//
+//			  uint32_t tickstart = HAL_GetTick();
+//			  uint32_t wait = 2500;
+//
+//			  /* Add a freq to guarantee minimum wait */
+//			  if (wait < HAL_MAX_DELAY)
+//			  {
+//				  wait += (uint32_t)(uwTickFreq);
+//			  }
+//
+//			  while ((HAL_GetTick() - tickstart) < wait)
+//			  {
+//				  key1State = HAL_GPIO_ReadPin(KEY1_GPIO_PORT, KEY1_GPIO_PIN);
+//				  key2State = HAL_GPIO_ReadPin(KEY2_GPIO_PORT, KEY2_GPIO_PIN);
+//				  if (key2State || key1State) {
+//					  break;
+//				  }
+//			  }
+//		  }
+//	  }
   }
 
   /* USER CODE END 3 */
@@ -456,6 +455,7 @@ static void MX_GPIO_Init(void)
   __HAL_RCC_GPIOC_CLK_ENABLE();
   __HAL_RCC_GPIOA_CLK_ENABLE();
   __HAL_RCC_GPIOE_CLK_ENABLE();
+  __HAL_RCC_GPIOB_CLK_ENABLE();
   __HAL_RCC_GPIOD_CLK_ENABLE();
 
   /*Configure GPIO pin Output Level */
@@ -475,6 +475,12 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_PULLDOWN;
   HAL_GPIO_Init(Key_1_GPIO_Port, &GPIO_InitStruct);
+
+  /*Configure GPIO pins : A_Button_Pin B_Button_Pin */
+  GPIO_InitStruct.Pin = A_Button_Pin|B_Button_Pin;
+  GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
+  GPIO_InitStruct.Pull = GPIO_PULLDOWN;
+  HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
   /*Configure GPIO pin : PD12 */
   GPIO_InitStruct.Pin = GPIO_PIN_12;

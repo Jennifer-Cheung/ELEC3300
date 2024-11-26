@@ -1,0 +1,14 @@
+../Core/Src/kirby.c:149:6:Kirby_movePlatform	32	static
+../Core/Src/kirby.c:183:6:Kirby_redrawColumnLeft	24	static
+../Core/Src/kirby.c:193:6:Kirby_redrawColumnRight	24	static
+../Core/Src/kirby.c:203:6:Kirby_redrawRowUp	24	static
+../Core/Src/kirby.c:212:6:Kirby_redrawRowDown	24	static
+../Core/Src/kirby.c:221:6:Kirby_eraseSprite	32	static
+../Core/Src/kirby.c:264:6:Kirby_displayKirbyFacingRight	56	static
+../Core/Src/kirby.c:279:6:Kirby_displayKirbyFacingLeft	56	static
+../Core/Src/kirby.c:294:5:Kirby_isOnGround	0	static
+../Core/Src/kirby.c:298:5:Kirby_isFalling	0	static
+../Core/Src/kirby.c:310:6:Kirby_updateState	40	static
+../Core/Src/kirby.c:405:6:Kirby_moveX	8	static
+../Core/Src/kirby.c:435:6:Kirby_moveY	8	static
+../Core/Src/kirby.c:449:6:Kirby_renderSprite	56	static
