@@ -23,7 +23,9 @@ Core/Src/kirby.o: ../Core/Src/kirby.c ../Core/Inc/kirby.h \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_sram.h \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_ll_fsmc.h \
  ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_pwr.h \
- ../Core/Inc/images.h ../Core/Inc/kirbySprites.h
+ ../Core/Inc/images.h ../Core/Inc/kirbySprites.h ../Core/Inc/tiles.h \
+ ../Core/Inc/enemy.h ../Core/Inc/images.h ../Core/Inc/lcd.h \
+ ../Core/Inc/kirby.h
 ../Core/Inc/kirby.h:
 ../Core/Inc/lcd.h:
 ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal.h:
@@ -52,3 +54,8 @@ Core/Src/kirby.o: ../Core/Src/kirby.c ../Core/Inc/kirby.h \
 ../Drivers/STM32F1xx_HAL_Driver/Inc/stm32f1xx_hal_pwr.h:
 ../Core/Inc/images.h:
 ../Core/Inc/kirbySprites.h:
+../Core/Inc/tiles.h:
+../Core/Inc/enemy.h:
+../Core/Inc/images.h:
+../Core/Inc/lcd.h:
+../Core/Inc/kirby.h:

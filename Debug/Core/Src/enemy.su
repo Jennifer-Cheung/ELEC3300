@@ -1,0 +1,6 @@
+../Core/Src/enemy.c:8:6:Enemy_displayEnemyFacingLeft	64	static
+../Core/Src/enemy.c:132:6:Enemy_redrawColumnLeft	24	static
+../Core/Src/enemy.c:142:6:Enemy_redrawColumnRight	24	static
+../Core/Src/enemy.c:152:6:Enemy_eraseBoomerang	40	static
+../Core/Src/enemy.c:163:6:Enemy_eraseEnemy	24	static
+../Core/Src/enemy.c:174:6:Enemy_updateEnemy	56	static

@@ -26,6 +26,7 @@
 #include "lcd.h"
 #include "images.h"
 #include "kirby.h"
+#include "enemy.h"
 
 /* USER CODE END Includes */
 
@@ -64,6 +65,16 @@ static void MX_FSMC_Init(void);
 /* USER CODE BEGIN 0 */
 
 void XferCpltCallback(DMA_HandleTypeDef* hdma);
+
+void handleWin() {
+	char string[10] = "You Win!!";
+	LCD_DrawString(0, 220, string);
+}
+
+void handleLose() {
+	char string[10] = "You Lose!!";
+	LCD_DrawString(0, 220, string);
+}
 
 /* USER CODE END 0 */
 
@@ -112,7 +123,7 @@ int main(void)
   LCD_Write_Cmd ( CMD_SetPixel );
 
   // Rendering platform Image
-  for (int y = 0; y < 209; y++) {
+  for (int y = 0; y < 216; y++) {
 	  HAL_DMA_Start_IT(&hdma_memtomem_dma1_channel1, (uint32_t)(&platformImg[882 * y]), (uint32_t)0x60020000, 320);
 	  HAL_Delay(1);
   }
@@ -202,8 +213,8 @@ int main(void)
 //  const uint16_t yPos = 110;
 
   struct Kirby kirby = {
-		  10,		// uint16_t xPos
-		  110,		// uint16_t yPos
+		  40,		// uint16_t xPos
+		  100,		// uint16_t yPos
 		  0,		// uint8_t hasSwallowed
 		  0,		// uint8_t isFloating
 		  0,		// uint8_t enableUp
@@ -213,7 +224,8 @@ int main(void)
 		  0,		// uint8_t currentFrame
 		  2500,		// uint16_t remainingTicks
 		  IDLE,		// enum State previousState
-		  1			// uint8_t enableStateChange
+		  1,		// uint8_t enableStateChange
+		  NORMAL	// enum Ability ability
   };
 
   /**
@@ -284,6 +296,20 @@ int main(void)
 
 	  /* Renders sprite */
 	  Kirby_renderSprite(&kirby);
+
+	  /* Updates and renders enemy */
+	  if (showEnemy) {
+		  Enemy_updateEnemy(&kirby);
+	  }
+
+	  /* Checks win or lose */
+	  if (Kirby_checkWin(&kirby)) {
+		  handleWin();
+		  break;
+	  } else if (Kirby_checkLose(&kirby)) {
+		  handleLose();
+		  break;
+	  }
 
 	  // Displays xPos on LCD
 //	  LCD_Clear(10, 210, 100, 20, 0xFFFF);

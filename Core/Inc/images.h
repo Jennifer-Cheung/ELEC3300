@@ -4,6 +4,6 @@
 #include <stdint.h>
 
 /* PlatformImg original dimension: 882 x 209 */
-extern const uint16_t platformImg[184338];
+extern const uint16_t platformImg[190512];
 
 #endif // __IMAGES_H

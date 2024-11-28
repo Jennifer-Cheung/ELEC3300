@@ -3,12 +3,14 @@
 #include "lcd.h"
 #include "images.h"
 #include "kirbySprites.h"
+#include "tiles.h"
+#include "enemy.h"
 
 const uint8_t KIRBY_WIDTH = 35;
 const uint8_t KIRBY_HEIGHT = 32;
-const uint16_t GROUND_HEIGHT = 110 + 32;
 const uint16_t SCREEN_WIDTH = 320;
-const uint16_t SCREEN_HEIGHT = 209;
+const uint16_t SCREEN_HEIGHT = 216;
+const uint8_t TILE_LENGTH = 24;
 
 uint8_t IDLE_WIDTH = 24;
 uint8_t IDLE_HEIGHT = 22;
@@ -151,13 +153,13 @@ void Kirby_movePlatform(uint16_t kirbyX) {
 	if (currentPos < xPos) {
 		// Scrolling to the right
 		uint16_t targetCol = (xPos - 1) % 320;
-		for (uint16_t row = 0; row < 209; row++) {
+		for (uint16_t row = 0; row < 216; row++) {
 			LCD_DrawDot(targetCol, row, platformImg[882 * row + xPos + 320 - 1]);
 		}
 	} else if (currentPos > xPos) {
 		// Scrolling to the left
 		uint16_t targetCol = xPos % 320;
-		for (uint16_t row = 0; row < 209; row++) {
+		for (uint16_t row = 0; row < 216; row++) {
 			LCD_DrawDot(targetCol, row, platformImg[882 * row + xPos]);
 		}
 	} else {
@@ -183,7 +185,7 @@ void Kirby_movePlatform(uint16_t kirbyX) {
 void Kirby_redrawColumnLeft(struct Kirby* kirby) {
 	// Redraw the first column
 	for (int y = 0; y < KIRBY_HEIGHT; y++) {
-	  uint16_t displayX = kirby->xPos % SCREEN_WIDTH;
+	  uint16_t displayX = (kirby->xPos) % SCREEN_WIDTH;
 	  uint16_t displayY = kirby->yPos + y;
 	  uint16_t color = platformImg[882 * (displayY) + (kirby->xPos)];
 	  LCD_DrawDot(displayX, displayY, color);
@@ -212,7 +214,7 @@ void Kirby_redrawRowUp(struct Kirby* kirby) {
 void Kirby_redrawRowDown(struct Kirby* kirby) {
 	for (int x = 0; x < KIRBY_WIDTH; x++) {
 		uint16_t displayX = (kirby->xPos + x) % SCREEN_WIDTH;
-		uint16_t displayY = kirby->yPos + KIRBY_HEIGHT;
+		uint16_t displayY = kirby->yPos + KIRBY_HEIGHT - 1;
 		uint16_t color = platformImg[882 * displayY + kirby->xPos + x];
 		LCD_DrawDot(displayX, displayY, color);
 	}
@@ -265,7 +267,7 @@ void Kirby_displayKirbyFacingRight(uint8_t spriteWidth, uint8_t spriteHeight, ui
 	for (int x = 0; x < spriteWidth; x++) {
 	  uint16_t displayXPos = (xPos + spriteOffset + x) % SCREEN_WIDTH;
 	  for (int y = spriteHeight - 1; y >= 0; y--) {
-		  uint16_t displayYPos = yPos + y;
+		  uint16_t displayYPos = yPos + y + (KIRBY_HEIGHT - spriteHeight);
 		  uint16_t color = frame[y * spriteWidth + x];
 		  if (color == 0x4B4E) {
 			  uint16_t newColor = platformImg[882 * (displayYPos) + (xPos + spriteOffset + x)];
@@ -280,7 +282,7 @@ void Kirby_displayKirbyFacingLeft(uint8_t spriteWidth, uint8_t spriteHeight, uin
 	for (int x = 0; x < spriteWidth; x++) {
 	  uint16_t displayXPos = (xPos + spriteOffset + spriteWidth - x) % SCREEN_WIDTH;
 	  for (int y = spriteHeight - 1; y >= 0; y--) {
-		  uint16_t displayYPos = yPos + y;
+		  uint16_t displayYPos = yPos + y + (KIRBY_HEIGHT - spriteHeight);
 		  uint16_t color = frame[y * spriteWidth + x];
 		  if (color == 0x4B4E) {
 			  uint16_t newColor = platformImg[882 * (displayYPos) + (xPos + spriteOffset + spriteWidth - x)];
@@ -291,12 +293,22 @@ void Kirby_displayKirbyFacingLeft(uint8_t spriteWidth, uint8_t spriteHeight, uin
 	}
 }
 
-int Kirby_isOnGround(uint16_t kirbyY, uint16_t groundY) {
-	return (kirbyY + KIRBY_HEIGHT) == groundY;
+int Kirby_isOnGround(const struct Kirby* kirby) {
+	// Checks if Kirby is on a ground tile
+	uint16_t pointX;
+	uint16_t pointY;
+	Kirby_getPointBelow(kirby, &pointX, &pointY);
+//	LCD_DrawDot(pointX, pointY, 0xf800); // For debug use
+	if (Tiles_getTileType(pointX, pointY) == GROUND || kirby->xPos + 17 > 456 && kirby->xPos + 17 < 528) {
+		return 1;
+	}
+
+	// Function still does not return, Kirby is not on ground
+	return 0;
 }
 
 int Kirby_isFalling(const struct Kirby* kirby) {
-	if (Kirby_isOnGround(kirby->yPos, GROUND_HEIGHT)) {
+	if (Kirby_isOnGround(kirby)) {
 		return 0;
 	} else {
 		if (kirby->enableUp) {
@@ -307,14 +319,35 @@ int Kirby_isFalling(const struct Kirby* kirby) {
 	}
 }
 
+void Kirby_getPointBelow(const struct Kirby* kirby, uint16_t* pointXPos, uint16_t* pointYPos) {
+	uint16_t xPos = kirby->xPos;
+	uint16_t yPos = kirby->yPos;
+	*pointXPos = xPos + 17;
+	*pointYPos = yPos + KIRBY_HEIGHT;
+}
+
+void Kirby_getPointLeft(const struct Kirby* kirby, uint16_t* pointXPos, uint16_t* pointYPos) {
+	uint16_t xPos = kirby->xPos;
+	uint16_t yPos = kirby->yPos;
+	*pointXPos = xPos + 5;
+	*pointYPos = yPos + KIRBY_HEIGHT - 1;
+}
+
+void Kirby_getPointRight(const struct Kirby* kirby, uint16_t* pointXPos, uint16_t* pointYPos) {
+	uint16_t xPos = kirby->xPos;
+	uint16_t yPos = kirby->yPos;
+	*pointXPos = xPos + KIRBY_WIDTH - 5;
+	*pointYPos = yPos + KIRBY_HEIGHT - 1;
+}
+
 void Kirby_updateState(struct Kirby* kirby, uint8_t inputB, uint8_t inputA, uint8_t inputLeft, uint8_t inputRight) {
 	kirby->previousState = kirby->state;
 
-	// Displays inputs
-	LCD_Clear(10, 210, 100, 20, 0xFFFF);
-	char buffer[8];
-	sprintf(buffer, "%c %c %c %c", inputB ? 'B' : ' ', inputA ? 'A' : ' ', inputLeft ? 'L' : ' ', inputRight ? 'R' : ' ');
-	LCD_DrawString(10, 210, buffer);
+//	// Displays inputs
+//	LCD_Clear(10, 210, 100, 20, 0xFFFF);
+//	char buffer[8];
+//	sprintf(buffer, "%c %c %c %c", inputB ? 'B' : ' ', inputA ? 'A' : ' ', inputLeft ? 'L' : ' ', inputRight ? 'R' : ' ');
+//	LCD_DrawString(10, 210, buffer);
 
 	/* Timeout */
 //	if (kirby->state == SPITTING || kirby->state == SWALLOWING || kirby->state == JUMPING || kirby->state == FLOATING_UP || kirby->state == SWALLOWED_JUMP) {
@@ -340,12 +373,18 @@ void Kirby_updateState(struct Kirby* kirby, uint8_t inputB, uint8_t inputA, uint
 			kirby->state = SWALLOWING;
 		}
 		return;
-	} else if (kirby->previousState == FLOATING_DOWN && Kirby_isOnGround(kirby->yPos, GROUND_HEIGHT)) {
+	} else if (kirby->previousState == FLOATING_DOWN && Kirby_isOnGround(kirby)) {
 		kirby->state = SPITTING;
 		kirby->hasSwallowed = 0;
 		kirby->isFloating = 0;
 		kirby->enableStateChange = 0;
 		return;
+	}
+
+	if (kirby->state == SWALLOWING && kirby->currentFrame == 1 && kirby->xPos > 316) {
+		// Kirby has swallowed enemy
+		kirby->hasSwallowed = 1;
+		Kirby_onSwallow();
 	}
 
 	/* A Button */
@@ -354,7 +393,7 @@ void Kirby_updateState(struct Kirby* kirby, uint8_t inputB, uint8_t inputA, uint
 			kirby->state = SWALLOWED_JUMP;
 			kirby->enableUp = 1;
 			kirby->enableStateChange = 0;
-		} else if (Kirby_isOnGround(kirby->yPos, GROUND_HEIGHT)) {
+		} else if (Kirby_isOnGround(kirby)) {
 			kirby->state = JUMPING;
 			kirby->enableUp = 1;
 			kirby->enableStateChange = 0;
@@ -402,6 +441,8 @@ void Kirby_updateState(struct Kirby* kirby, uint8_t inputB, uint8_t inputA, uint
 	return;
 }
 
+static uint8_t moveYLock = 1;
+
 void Kirby_moveX(struct Kirby* kirby, enum Direction direction) {
 	/* Sets enableX */
 	if (kirby->state == SPITTING || kirby->state == SWALLOWING) {
@@ -413,6 +454,26 @@ void Kirby_moveX(struct Kirby* kirby, enum Direction direction) {
 	if (kirby->enableX) {
 		kirby->direction = direction;
 		if (direction == LEFT) {
+			// Checks if the left pixel is a ground tile
+			uint16_t leftX = 0;
+			uint16_t leftY = 0;
+			Kirby_getPointLeft(kirby, &leftX, &leftY);
+			if (Tiles_getTileType(leftX, leftY) == GROUND) {
+				return;
+			}
+
+			// Checks the slope
+			if (kirby->xPos + 17 > 456 && kirby->xPos + 17 < 528) {
+				moveYLock = 0;
+				if ((kirby->xPos + 17 - 455) % 3 == 0) {
+					// Moves up
+					Kirby_redrawRowDown(kirby);
+					kirby->yPos--;
+				}
+			} else {
+				moveYLock = 1;
+			}
+
 			Kirby_redrawColumnRight(kirby);
 			if (kirby->xPos > 0) {
 				if (kirby->xPos > 160 && kirby->xPos < 696) {
@@ -421,6 +482,26 @@ void Kirby_moveX(struct Kirby* kirby, enum Direction direction) {
 				kirby->xPos--;
 			}
 		} else if (direction == RIGHT) {
+			// Checks if the right pixel is a ground tile
+			uint16_t rightX = 0;
+			uint16_t rightY = 0;
+			Kirby_getPointRight(kirby, &rightX, &rightY);
+			if (Tiles_getTileType(rightX, rightY) == GROUND) {
+				return;
+			}
+
+			// Checks the slope
+			if (kirby->xPos + 17 > 456 && kirby->xPos + 17 < 528) {
+				moveYLock = 0;
+				if ((kirby->xPos + 17 - 456) % 3 == 0) {
+					// Moves down
+					Kirby_redrawRowUp(kirby);
+					kirby->yPos++;
+				}
+			} else {
+				moveYLock = 1;
+			}
+
 			Kirby_redrawColumnLeft(kirby);
 			if (kirby->xPos < 829) {
 			  if (kirby->xPos > 160 && kirby->xPos < 696) {
@@ -433,15 +514,19 @@ void Kirby_moveX(struct Kirby* kirby, enum Direction direction) {
 }
 
 void Kirby_moveY(struct Kirby* kirby) {
-	if (Kirby_isFalling(kirby)) {
-		Kirby_redrawRowUp(kirby);
-		if (kirby->yPos < GROUND_HEIGHT) {
-			kirby->yPos++;
-		}
-	} else if (kirby->enableUp) {
-		Kirby_redrawRowDown(kirby);
-		if (kirby->yPos > 0) {
-			kirby->yPos--;
+	if (moveYLock) {
+		if (Kirby_isFalling(kirby)) {
+			// Moves down
+			Kirby_redrawRowUp(kirby);
+			if (!Kirby_isOnGround(kirby)) {
+				kirby->yPos++;
+			}
+		} else if (kirby->enableUp) {
+			// Moves up
+			Kirby_redrawRowDown(kirby);
+			if (kirby->yPos > 0) {
+				kirby->yPos--;
+			}
 		}
 	}
 }
@@ -462,36 +547,36 @@ void Kirby_renderSprite(struct Kirby* kirby) {
 	uint8_t spriteOffset = 0;
 
 	// Displays state
-	LCD_Clear(10, 210, 100, 20, 0xFFFF);
-	char buffer[10];
-	if (currentState == IDLE) {
-		sprintf(buffer, "%s", "IDLE");
-	} else if (currentState == WALKING) {
-		sprintf(buffer, "%s", "WALK");
-	} else if (currentState == FLOATING_UP) {
-		sprintf(buffer, "%s", "FL_UP");
-	} else if (currentState == FLOATING_DOWN) {
-		sprintf(buffer, "%s", "FL_DN");
-	} else if (currentState == SPITTING) {
-		sprintf(buffer, "%s", "SPIT");
-	} else if (currentState == SWALLOWED_IDLE) {
-		sprintf(buffer, "%s", "SW_IDLE");
-	} else if (currentState == SWALLOWING) {
-		sprintf(buffer, "%s", "SWALLOW");
-	} else if (currentState == SWALLOWED_WALK) {
-		sprintf(buffer, "%s", "SW_WALK");
-	} else if (currentState == JUMPING) {
-		sprintf(buffer, "%s", "JUMP");
-	} else if (currentState == FALLING) {
-		sprintf(buffer, "%s", "FALL");
-	} else if (currentState == SWALLOWED_JUMP) {
-		sprintf(buffer, "%s", "SW_JUMP");
-	} else if (currentState == SWALLOWED_FALL) {
-		sprintf(buffer, "%s", "SW_FALL");
-	} else {
-		sprintf(buffer, "%s", "Unacc.");
-	}
-	LCD_DrawString(200, 210, buffer);
+//	LCD_Clear(10, 210, 100, 20, 0xFFFF);
+//	char buffer[10];
+//	if (currentState == IDLE) {
+//		sprintf(buffer, "%s", "IDLE");
+//	} else if (currentState == WALKING) {
+//		sprintf(buffer, "%s", "WALK");
+//	} else if (currentState == FLOATING_UP) {
+//		sprintf(buffer, "%s", "FL_UP");
+//	} else if (currentState == FLOATING_DOWN) {
+//		sprintf(buffer, "%s", "FL_DN");
+//	} else if (currentState == SPITTING) {
+//		sprintf(buffer, "%s", "SPIT");
+//	} else if (currentState == SWALLOWED_IDLE) {
+//		sprintf(buffer, "%s", "SW_IDLE");
+//	} else if (currentState == SWALLOWING) {
+//		sprintf(buffer, "%s", "SWALLOW");
+//	} else if (currentState == SWALLOWED_WALK) {
+//		sprintf(buffer, "%s", "SW_WALK");
+//	} else if (currentState == JUMPING) {
+//		sprintf(buffer, "%s", "JUMP");
+//	} else if (currentState == FALLING) {
+//		sprintf(buffer, "%s", "FALL");
+//	} else if (currentState == SWALLOWED_JUMP) {
+//		sprintf(buffer, "%s", "SW_JUMP");
+//	} else if (currentState == SWALLOWED_FALL) {
+//		sprintf(buffer, "%s", "SW_FALL");
+//	} else {
+//		sprintf(buffer, "%s", "Unacc.");
+//	}
+//	LCD_DrawString(200, 210, buffer);
 
 	uint8_t walkingTicks = 1;
 	uint8_t floatingTicks = 1;
@@ -718,4 +803,19 @@ void Kirby_renderSprite(struct Kirby* kirby) {
 	} else {
 		Kirby_displayKirbyFacingRight(spriteWidth, spriteHeight, spriteOffset, sprite, xPos, yPos);
 	}
+}
+
+void Kirby_onSwallow() {
+	// Erases sir kibble and the boomerang
+	Enemy_eraseBoomerang();
+	Enemy_eraseEnemy();
+	showEnemy = 0;
+}
+
+uint8_t Kirby_checkWin(struct Kirby* kirby) {
+	return kirby->xPos > 744;
+}
+
+uint8_t Kirby_checkLose(struct Kirby* kirby) {
+	return kirby->yPos > 192;
 }
